@@ -20,7 +20,8 @@ export default async function handler(req) {
   }
 
   try {
-    const url = new URL(req.url);
+    const proto = req.headers["x-forwarded-proto"] || "https";
+const url = new URL(req.url, `${proto}://${req.headers.host}`);
     const targetUrl = TARGET_BASE + url.pathname + url.search;
 
     const headers = new Headers(req.headers);
