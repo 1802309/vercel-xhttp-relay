@@ -12,36 +12,49 @@ const STRIP_HEADERS = new Set([
   "trailer",
   "transfer-encoding",
   "upgrade",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-forwarded-port",
 ]);
 
-export default async function handler(req) {
+export default async function handler(req, res) {
   if (!TARGET_BASE) {
-    return new Response("Missing TARGET_DOMAIN", { status: 500 });
+    res.status(500).send("Missing TARGET_DOMAIN");
+    return;
   }
 
   try {
     const proto = req.headers["x-forwarded-proto"] || "https";
-const url = new URL(req.url, `${proto}://${req.headers.host}`);
-    const targetUrl = TARGET_BASE + url.pathname + url.search;
+    const baseUrl = new URL(req.url, `${proto}://${req.headers.host}`);
 
-    const headers = new Headers(req.headers);
-    for (const h of STRIP_HEADERS) headers.delete(h);
+    const targetUrl = TARGET_BASE + baseUrl.pathname + baseUrl.search;
 
-    headers.set("host", new URL(TARGET_BASE).hostname);
+    const headers = { ...req.headers };
 
-    const res = await fetch(targetUrl, {
+    for (const h of STRIP_HEADERS) {
+      delete headers[h];
+    }
+
+    headers.host = new URL(TARGET_BASE).hostname;
+
+    const response = await fetch(targetUrl, {
       method: req.method,
       headers,
-      body: req.body,
+      body: req.method === "GET" || req.method === "HEAD" ? undefined : req,
       redirect: "manual",
     });
 
-    return new Response(res.body, {
-      status: res.status,
-      headers: res.headers,
+    const data = await response.arrayBuffer();
+
+    res.status(response.status);
+
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
     });
-  } catch (e) {
-    console.error(e);
-    return new Response("Bad Gateway", { status: 502 });
+
+    res.send(Buffer.from(data));
+  } catch (err) {
+    console.error("Relay error:", err);
+    res.status(502).send("Bad Gateway");
   }
 }
