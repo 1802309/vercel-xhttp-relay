@@ -44,6 +44,7 @@ export default async function handler(req) {
       out.set(k, v);
     }
     if (clientIp) out.set("x-forwarded-for", clientIp);
+out.set("host", new URL(TARGET_BASE).hostname);
 
     const method = req.method;
     const hasBody = method !== "GET" && method !== "HEAD";
