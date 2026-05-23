@@ -2,6 +2,21 @@ export const config = { runtime: "nodejs" };
 
 const TARGET_BASE = (process.env.TARGET_DOMAIN || "").replace(/\/$/, "");
 
+const STRIP_HEADERS = new Set([
+  "host",
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-forwarded-port",
+]);
+
 export default async function handler(req, res) {
   if (!TARGET_BASE) {
     res.status(500).send("Missing TARGET_DOMAIN");
@@ -10,39 +25,46 @@ export default async function handler(req, res) {
 
   try {
     const proto = req.headers["x-forwarded-proto"] || "https";
-    const baseUrl = new URL(req.url, `${proto}://${req.headers.host}`);
-    const targetUrl = TARGET_BASE + baseUrl.pathname + baseUrl.search;
 
-    const headers = {};
-    for (const [k, v] of Object.entries(req.headers)) {
-      if (["host","connection","keep-alive","transfer-encoding","upgrade"].includes(k)) continue;
-      headers[k] = v;
+    const incomingUrl = new URL(
+      req.url,
+      `${proto}://${req.headers.host}`
+    );
+
+    const targetUrl =
+      TARGET_BASE + incomingUrl.pathname + incomingUrl.search;
+
+    const headers = { ...req.headers };
+
+    for (const h of STRIP_HEADERS) {
+      delete headers[h];
     }
-    headers["host"] = new URL(TARGET_BASE).hostname;
 
-    const hasBody = req.method !== "GET" && req.method !== "HEAD";
+    headers.host = new URL(TARGET_BASE).hostname;
 
-    const fetchOptions = {
+    const response = await fetch(targetUrl, {
       method: req.method,
       headers,
+      body:
+        req.method === "GET" || req.method === "HEAD"
+          ? undefined
+          : req,
       redirect: "manual",
-    };
-
-    if (hasBody) {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      fetchOptions.body = Buffer.concat(chunks);
-    }
-
-    const response = await fetch(targetUrl, fetchOptions);
+    });
 
     res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-    const data = await response.arrayBuffer();
-    res.send(Buffer.from(data));
 
+    response.headers.forEach((value, key) => {
+      try {
+        res.setHeader(key, value);
+      } catch (_) {}
+    });
+
+    if (response.body) {
+      response.body.pipe(res);
+    } else {
+      res.end();
+    }
   } catch (err) {
     console.error("Relay error:", err);
     res.status(502).send("Bad Gateway");
