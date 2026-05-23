@@ -1,3 +1,5 @@
+import { Readable } from "stream";
+
 export const config = { runtime: "nodejs" };
 
 const TARGET_BASE = (process.env.TARGET_DOMAIN || "").replace(/\/$/, "");
@@ -61,7 +63,7 @@ export default async function handler(req, res) {
     });
 
     if (response.body) {
-      response.body.pipe(res);
+      Readable.fromWeb(response.body).pipe(res);
     } else {
       res.end();
     }
