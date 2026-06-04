@@ -1,6 +1,6 @@
 {
   "version": 2,
   "routes": [
-    { "src": "/cdn", "dest": "/api" }
+    { "src": "/(.*)", "dest": "/api/proxy" }
   ]
 }
