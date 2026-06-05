@@ -45,14 +45,16 @@ export default async function handler(req, res) {
     headers.host = new URL(TARGET_BASE).hostname;
 
     const response = await fetch(targetUrl, {
-      method: req.method,
-      headers,
-      body:
-        req.method === "GET" || req.method === "HEAD"
-          ? undefined
-          : req,
-      redirect: "manual",
-    });
+  method: req.method,
+  headers,
+  body:
+    req.method === "GET" || req.method === "HEAD"
+      ? undefined
+      : req,
+  redirect: "manual",
+  duplex: "half",
+});
+
 
     res.status(response.status);
 
